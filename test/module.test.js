@@ -42,6 +42,24 @@ const testSuite = () => {
     expect(html).toContain('Works!')
   })
 
+  test('redirect error with control character', async () => {
+    const requestOptions = {
+      uri: url(encodeURI('/mapped/ab\u0001')),
+      resolveWithFullResponse: true
+    }
+
+    await expect(request(requestOptions)).rejects.toHaveProperty('statusCode', 404)
+  })
+
+  test('redirect error with failing "to" function', async () => {
+    const requestOptions = {
+      uri: url('/errorInToFunction'),
+      resolveWithFullResponse: true
+    }
+
+    await expect(request(requestOptions)).rejects.toHaveProperty('statusCode', 500)
+  })
+
   test('many redirect', async () => {
     for (const n of ['abcde', 'abcdeasd', 'raeasdsads']) {
       const html = await get(`/many/${n}`)
@@ -103,13 +121,17 @@ describe('function', () => {
 })
 
 describe('function inline', () => {
+  const inlineConfig = {
+    ...config,
+    modules: [
+      [require('../'), redirects]
+    ]
+  }
+
+  delete inlineConfig.redirect
+
   beforeAll(async () => {
-    nuxt = await setupNuxt({
-      ...config,
-      modules: [
-        [require('../'), redirects]
-      ]
-    })
+    nuxt = await setupNuxt(inlineConfig)
   })
 
   afterAll(async () => {
@@ -117,6 +139,34 @@ describe('function inline', () => {
   })
 
   testSuite()
+})
+
+describe('default statusCode', () => {
+  beforeAll(async () => {
+    nuxt = await setupNuxt({
+      ...config,
+      redirect: {
+        rules: redirects,
+        statusCode: 301
+      }
+    })
+  })
+
+  afterAll(async () => {
+    await nuxt.close()
+  })
+
+  test('301 Moved Permanently', async () => {
+    try {
+      await request({
+        uri: url('/redirected'),
+        resolveWithFullResponse: true,
+        followRedirect: false
+      })
+    } catch (e) {
+      expect(e.statusCode).toBe(301)
+    }
+  })
 })
 
 describe('default statusCode', () => {
